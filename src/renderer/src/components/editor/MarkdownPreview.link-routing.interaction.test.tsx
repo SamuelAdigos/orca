@@ -251,4 +251,77 @@ describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
     })
     expect(openUrlMock).not.toHaveBeenCalled()
   })
+
+  describe('file links with a #L line', () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrameId = 0
+
+    beforeEach(() => {
+      frames.clear()
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        nextFrameId += 1
+        frames.set(nextFrameId, callback)
+        return nextFrameId
+      })
+      vi.stubGlobal('cancelAnimationFrame', (frameId: number) => {
+        frames.delete(frameId)
+      })
+      const diffComments: never[] = []
+      const sourceWorktree = { id: 'wt-1', path: '/repo', diffComments }
+      const otherWorktree = { id: 'wt-2', path: '/other', diffComments }
+      worktreeLookup.value = [sourceWorktree, otherWorktree]
+      storeState.worktreesByRepo = { repo: [sourceWorktree], other: [otherWorktree] }
+      targetConnectionOwners.set('wt-1', null)
+      targetConnectionOwners.set('wt-2', null)
+      storeState.openFile.mockReset()
+      storeState.setPendingEditorReveal.mockClear()
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    function flushFrames(): void {
+      // Map iteration also visits frames queued by the callbacks it runs.
+      for (const [frameId, callback] of frames) {
+        frames.delete(frameId)
+        callback(0)
+      }
+    }
+
+    async function clickLineLink(href: string): Promise<void> {
+      const anchor = render(`[target](${href})`, href)
+      await act(async () => {
+        anchor.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }))
+      })
+    }
+
+    it('reveals the line in another worktree after the preview unmounts', async () => {
+      await clickLineLink('file:///other/src/Example.cs#L120')
+      // Why: the worktree switch unmounts this preview before the reveal frames run.
+      act(() => {
+        root.unmount()
+      })
+      flushFrames()
+
+      expect(storeState.openFile).toHaveBeenCalledWith(
+        expect.objectContaining({ worktreeId: 'wt-2', filePath: '/other/src/Example.cs' })
+      )
+      expect(storeState.setPendingEditorReveal).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filePath: '/other/src/Example.cs', line: 120, column: 1 })
+      )
+    })
+
+    it('reveals the line in the same worktree', async () => {
+      await clickLineLink('file:///repo/src/Example.cs#L42C7')
+      flushFrames()
+
+      expect(storeState.openFile).toHaveBeenCalledWith(
+        expect.objectContaining({ worktreeId: 'wt-1', filePath: '/repo/src/Example.cs' })
+      )
+      expect(storeState.setPendingEditorReveal).toHaveBeenLastCalledWith(
+        expect.objectContaining({ filePath: '/repo/src/Example.cs', line: 42, column: 7 })
+      )
+    })
+  })
 })
