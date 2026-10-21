@@ -22,7 +22,9 @@ import {
   readNativeChatCopyImage,
   type NativeChatCopyImage
 } from './native-chat-image-copy'
-import { isMacPlatform, nativeChatToggleShortcutLabel } from './native-chat-shortcut'
+import { isMacPlatform } from './native-chat-shortcut'
+import { formatOptionalPrimaryShortcutLabel } from '@/hooks/useShortcutLabel'
+import { useAppStore } from '@/store'
 import { TabWorkspaceLayoutMenuSection } from '@/components/tab-bar/TabWorkspaceLayoutMenuSection'
 import { canMoveTabToNewPaneColumn } from '@/components/tab-bar/tab-move-to-pane-column'
 import { isEditableTarget } from '@/lib/editable-target'
@@ -164,7 +166,8 @@ export function useNativeChatContextMenu({
     target: noNativeChatContextMenuTarget,
     returnFocusTo: null
   })
-  const shortcutLabel = nativeChatToggleShortcutLabel(isMacPlatform())
+  const keybindings = useAppStore((s) => s.keybindings)
+  const shortcutLabel = formatOptionalPrimaryShortcutLabel('terminal.toggleNativeChat', keybindings)
   const { image, target } = state
   // Copy, Copy image, Paste and the target rows each show only when they apply to what was right-clicked.
   const hasSelection = state.selectedText.trim().length > 0
@@ -296,7 +299,9 @@ export function useNativeChatContextMenu({
                     'components.tab.bar.SortableTabContextMenu.switchToTerminalView',
                     'Continue with Terminal Agent'
                   )}
-                  <DropdownMenuShortcut>{shortcutLabel}</DropdownMenuShortcut>
+                  {shortcutLabel ? (
+                    <DropdownMenuShortcut>{shortcutLabel}</DropdownMenuShortcut>
+                  ) : null}
                 </DropdownMenuItem>
               ) : null}
               {actions.canContinueAgentSessionInNewSession ? (

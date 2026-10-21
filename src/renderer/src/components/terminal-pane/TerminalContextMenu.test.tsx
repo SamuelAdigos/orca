@@ -203,6 +203,21 @@ describe('TerminalContextMenu', () => {
     ).toBe(false)
   })
 
+  it('labels the chat view switch with the user binding, or none when unbound', () => {
+    const chatItemShortcut = (keybindings: KeybindingOverrides): string[] => {
+      shortcuts.list = []
+      renderMenu({ canToggleNativeChat: true, keybindings })
+      return shortcuts.list
+    }
+    const hasToggleLabel = (labels: string[]): boolean =>
+      labels.some((shortcut) => shortcut.endsWith('J') || shortcut === 'Unassigned')
+
+    expect(chatItemShortcut({ 'terminal.toggleNativeChat': ['Mod+Alt+C'] })).toContain('Ctrl+Alt+C')
+    // Linux starts unbound, so the menu must not advertise Switch worktree's Ctrl+Shift+J.
+    expect(hasToggleLabel(chatItemShortcut({}))).toBe(false)
+    expect(hasToggleLabel(chatItemShortcut({ 'terminal.toggleNativeChat': [] }))).toBe(false)
+  })
+
   it('shows one shortcut per terminal menu action on Windows', () => {
     vi.stubGlobal('navigator', {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'

@@ -11,6 +11,21 @@ export const KEYBINDING_DEFINITION_CORE_4: readonly KeybindingDefinition[] = [
     defaultBindings: platformBindings(['Mod+F'])
   },
   {
+    id: 'terminal.toggleNativeChat',
+    title: 'Switch between Chat UI and terminal',
+    group: 'Chat',
+    scope: 'terminal',
+    // Why: it fires from an app key listener alongside global shortcuts, so Settings must warn when the two share a chord.
+    conflictGroup: 'global',
+    searchKeywords: ['shortcut', 'chat', 'chat ui', 'native chat', 'terminal', 'toggle', 'switch'],
+    // Why: Ctrl+Shift+J is Switch worktree's default on Windows/Linux, so those platforms start unbound.
+    defaultBindings: {
+      darwin: ['Mod+Shift+J'],
+      linux: [],
+      win32: []
+    }
+  },
+  {
     id: 'sidebar.childWorkspaces.toggle',
     title: 'Toggle Child Workspaces',
     group: 'Global',

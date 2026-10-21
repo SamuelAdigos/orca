@@ -5,7 +5,8 @@ import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-typ
 import { resolveNativeChatTabAgentEvidence } from '../tab-bar/native-chat-tab-agent-evidence'
 import { canToggleNativeChat } from './native-chat-availability'
 import { isNativeChatTranscriptLocalReadable } from '@/lib/native-chat-transcript-readability'
-import { isMacPlatform, matchesNativeChatToggleShortcut } from './native-chat-shortcut'
+import { matchesNativeChatToggleShortcut } from './native-chat-shortcut'
+import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { getConnectionIdFromState } from '@/lib/connection-context'
 import { resolveKeyboardWorkspaceId } from '@/lib/floating-workspace-terminal-actions'
 import {
@@ -46,12 +47,15 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
     if (!isWorktreeActive) {
       return
     }
-    const isMac = isMacPlatform()
+    const platform = getShortcutPlatform()
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.repeat || !matchesNativeChatToggleShortcut(e, isMac)) {
+      if (e.repeat) {
         return
       }
       const state = useAppStore.getState()
+      if (!matchesNativeChatToggleShortcut(e, platform, state.keybindings)) {
+        return
+      }
       // Why: the floating panel and the main window can both be on screen; only the one the key
       // press came from toggles.
       if (resolveKeyboardWorkspaceId(e.target, state.activeWorktreeId) !== worktreeId) {
