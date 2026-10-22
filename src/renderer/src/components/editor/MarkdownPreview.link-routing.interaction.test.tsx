@@ -11,6 +11,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MarkdownPreviewSourceOpenFile } from './markdown-preview-types'
 
 const createBrowserTabMock = vi.fn()
 const setActiveWorktreeMock = vi.fn()
@@ -23,6 +24,9 @@ const worktreeLookup = vi.hoisted(() => ({
   value: [] as { id: string; path: string; diffComments: never[] }[]
 }))
 const statRuntimePathMock = vi.hoisted(() => vi.fn(async () => ({ isDirectory: false })))
+
+const openFiles: MarkdownPreviewSourceOpenFile[] = []
+const activeFileIdByWorktree: Record<string, string | null> = {}
 
 // Minimal store: MarkdownPreview reads settings/worktreesByRepo plus a handful
 // of action functions. None of the actions fire on the http path under test.
@@ -42,8 +46,8 @@ const storeState = {
   repos: [],
   folderWorkspaces: [],
   projectGroups: [],
-  openFiles: [],
-  activeFileIdByWorktree: {},
+  openFiles,
+  activeFileIdByWorktree,
   settings: { openLinksInApp: true },
   editorFontZoomLevel: 0
 }
@@ -100,6 +104,7 @@ vi.mock('./NotesSendMenu', () => ({ NotesSendMenu: () => null }))
 vi.mock('./MarkdownTableOfContentsPanel', () => ({ MarkdownTableOfContentsPanel: () => null }))
 
 import MarkdownPreview from './MarkdownPreview'
+import { buildOwnedEditorFileId } from '@/store/slices/editor/file-ids/editor-file-ids'
 import { registerHttpLinkStoreAccessor } from '../../lib/http-link-routing'
 
 describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
@@ -279,6 +284,8 @@ describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
 
     afterEach(() => {
       vi.unstubAllGlobals()
+      storeState.openFiles = []
+      storeState.activeFileIdByWorktree = {}
     })
 
     function flushFrames(): void {
@@ -297,6 +304,14 @@ describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
     }
 
     it('reveals the line in another worktree after the preview unmounts', async () => {
+      const targetFileId = buildOwnedEditorFileId('/other/src/Example.cs', 'wt-2', null)
+      // Why: the real openFile registers an owner-qualified record; the editor only applies a reveal whose fileId matches it.
+      storeState.openFile.mockImplementation(
+        (file: { filePath: string; relativePath: string; worktreeId: string }) => {
+          storeState.openFiles = [{ ...file, id: targetFileId, mode: 'edit' }]
+          storeState.activeFileIdByWorktree = { [file.worktreeId]: targetFileId }
+        }
+      )
       await clickLineLink('file:///other/src/Example.cs#L120')
       // Why: the worktree switch unmounts this preview before the reveal frames run.
       act(() => {
@@ -308,7 +323,12 @@ describe('MarkdownPreview http link routing (Cmd vs Cmd+Shift click)', () => {
         expect.objectContaining({ worktreeId: 'wt-2', filePath: '/other/src/Example.cs' })
       )
       expect(storeState.setPendingEditorReveal).toHaveBeenLastCalledWith(
-        expect.objectContaining({ filePath: '/other/src/Example.cs', line: 120, column: 1 })
+        expect.objectContaining({
+          fileId: targetFileId,
+          filePath: '/other/src/Example.cs',
+          line: 120,
+          column: 1
+        })
       )
     })
 
