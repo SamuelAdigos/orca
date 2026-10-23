@@ -159,13 +159,14 @@ describe('toggle admission and executable ownership', () => {
   it('does not rescan saved aliases on repeated input (N and 10N operation counts)', () => {
     const operations = (count: number): number => {
       let reads = 0
-      const aliases = new Proxy(['Mod+Shift+J', ...Array<string>(count - 1).fill('Mod+Alt+Y')], {
-        get(target, property, receiver) {
-          if (typeof property === 'string' && /^\d+$/.test(property)) {
+      const aliases = ['Mod+Shift+J', ...Array<string>(count - 1).fill('Mod+Alt+Y')]
+      aliases.forEach((binding, index) => {
+        Object.defineProperty(aliases, index, {
+          get() {
             reads++
+            return binding
           }
-          return Reflect.get(target, property, receiver)
-        }
+        })
       })
       const overrides = { 'worktree.navigateDown': aliases }
       expect(
@@ -176,6 +177,7 @@ describe('toggle admission and executable ownership', () => {
         )
       ).toBe(false)
       const cold = reads
+      expect(cold).toBeGreaterThan(0)
       for (let i = 0; i < 100; i++) {
         matchesNativeChatToggleShortcut(
           { key: 'j', metaKey: true, shiftKey: true },
