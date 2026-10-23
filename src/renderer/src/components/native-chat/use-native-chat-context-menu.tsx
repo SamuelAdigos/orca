@@ -167,7 +167,7 @@ export function useNativeChatContextMenu({
   })
   const shortcutLabel = useNativeChatToggleShortcutLabel(
     state.returnFocusTo ?? rootRef.current,
-    !isEventTargetInsideFloatingWorkspacePanel(rootRef.current)
+    state.open && !isEventTargetInsideFloatingWorkspacePanel(rootRef.current)
   )
   const { image, target } = state
   // Copy, Copy image, Paste and the target rows each show only when they apply to what was right-clicked.

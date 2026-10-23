@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   findKeybindingConflicts,
   getEffectiveKeybindingsForAction,
@@ -14,7 +14,10 @@ import {
   findKeybindingConflictsForDefinitions,
   KEYBINDING_DEFINITIONS
 } from '../../../../shared/keybindings'
-import { pluginCommandKeybindingDefinition } from '@/lib/plugin-command-keybindings'
+import {
+  findPluginCommandForKeybinding,
+  pluginCommandKeybindingDefinition
+} from '@/lib/plugin-command-keybindings'
 
 const toggle = 'terminal.toggleNativeChat'
 const context = { target: document.body, pluginCommands: [], hasActiveWorktree: true }
@@ -92,6 +95,56 @@ describe('toggle admission and executable ownership', () => {
     expect(
       executableNativeChatToggleBindings('darwin', bindings, { ...active, ownsShortcut: false })
     ).toEqual([])
+    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
+    const search = document.createElement('input')
+    search.setAttribute('data-file-search-input', '')
+    const searchContext = { ...active, target: search }
+    try {
+      expect(executableNativeChatToggleBindings('win32', bindings, searchContext)).toEqual([
+        'Mod+Alt+K'
+      ])
+      const layoutInput = new KeyboardEvent('keydown', {
+        key: 'y',
+        code: 'KeyZ',
+        ctrlKey: true,
+        altKey: true
+      })
+      Object.defineProperty(layoutInput, 'getModifierState', { value: () => false })
+      expect(matchesNativeChatToggleShortcut(layoutInput, 'win32', bindings, searchContext)).toBe(
+        true
+      )
+      const composingInput = new KeyboardEvent('keydown', {
+        key: 'y',
+        code: 'KeyY',
+        ctrlKey: true,
+        altKey: true,
+        isComposing: true
+      })
+      Object.defineProperty(composingInput, 'getModifierState', { value: () => false })
+      expect(
+        findPluginCommandForKeybinding([plugin], composingInput, 'win32', bindings, true, {
+          context: 'app',
+          target: search
+        })
+      ).toBeNull()
+      expect(
+        matchesNativeChatToggleShortcut(composingInput, 'win32', bindings, searchContext)
+      ).toBe(true)
+      const altGraphInput = new KeyboardEvent('keydown', {
+        key: 'y',
+        code: 'KeyY',
+        ctrlKey: true,
+        altKey: true
+      })
+      Object.defineProperty(altGraphInput, 'getModifierState', {
+        value: (key: string) => key === 'AltGraph'
+      })
+      expect(matchesNativeChatToggleShortcut(altGraphInput, 'win32', bindings, searchContext)).toBe(
+        true
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
     const definition = pluginCommandKeybindingDefinition(plugin)
     const saved = { [definition.id]: ['Mod+Shift+J'] }
     const definitions = [...KEYBINDING_DEFINITIONS, definition]

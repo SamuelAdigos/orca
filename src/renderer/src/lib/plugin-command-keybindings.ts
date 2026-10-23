@@ -62,7 +62,7 @@ export function getEffectivePluginCommandKeybindings(
 
 export function findPluginCommandForKeybinding(
   commands: readonly ActivePluginCommand[],
-  input: KeybindingInput,
+  input: KeybindingInput & Partial<Parameters<typeof fileSearchClaimsTextKey>[0]>,
   platform: NodeJS.Platform,
   overrides: KeybindingOverrides | undefined,
   hasActiveWorktree: boolean,
@@ -71,7 +71,17 @@ export function findPluginCommandForKeybinding(
   if (
     context &&
     (context.context !== 'app' ||
-      fileSearchClaimsTextKey({ ...input, target: context.target }) ||
+      fileSearchClaimsTextKey({
+        target: context.target,
+        key: input.key,
+        code: input.code,
+        metaKey: input.meta ?? input.metaKey,
+        ctrlKey: input.control ?? input.ctrlKey,
+        altKey: input.alt ?? input.altKey,
+        shiftKey: input.shift ?? input.shiftKey,
+        isComposing: input.isComposing,
+        altGraph: input.altGraph || input.getModifierState?.('AltGraph')
+      }) ||
       isFloatingWorkspaceTerminalInputTarget(context.target) ||
       (isFloatingWorkspacePanelFocused() &&
         matchFloatingWorkspacePanelChord(input, platform, null, overrides, context) !== null))

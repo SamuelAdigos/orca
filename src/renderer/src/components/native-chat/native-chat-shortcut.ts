@@ -47,7 +47,7 @@ export function executableNativeChatToggleBindings(
     if (input && !keybindingMatchesInput(binding, input, platform)) {
       return false
     }
-    const candidate = { ...keybindingInputForBinding(binding, platform), target: context.target }
+    const candidate = input ?? keybindingInputForBinding(binding, platform)
     return (
       !isNativeChatToggleInputReserved(candidate, platform, keybindings) &&
       resolveWindowShortcutAction(candidate, platform, keybindings, options)?.type !==

@@ -48,7 +48,39 @@ afterEach(() => {
   commands.current = []
 })
 
-it('renders the first executable alias, refreshes plugins with identical overrides, and respects floating owner context', () => {
+it('does no closed-menu population work, refreshes executable aliases, and respects floating ownership', () => {
+  vi.stubGlobal('navigator', { userAgent: 'Macintosh' })
+  useAppStore.setState({ keybindings: {}, activeWorktreeId: 'main', settings: null })
+  for (const count of [10, 100]) {
+    let visits = 0
+    commands.current = Array.from({ length: count }, (_, index) => ({
+      pluginKey: 'test.plugin',
+      pluginName: 'Test',
+      id: String(index),
+      title: 'Unbound',
+      context: 'worktree',
+      handler: { type: 'built-in', action: 'view.tasks' },
+      get keybindings() {
+        visits++
+        return []
+      }
+    }))
+    const closed = render(<Menu />)
+    for (let frame = 0; frame < 10; frame++) {
+      closed.rerender(<Menu />)
+    }
+    expect(visits).toBe(0)
+    fireEvent.contextMenu(screen.getByTestId('chat'))
+    expect(visits).toBeGreaterThanOrEqual(count)
+    expect(screen.getByTestId('shortcut').textContent).toBe('⌘⇧J')
+    commands.current = [
+      { ...commands.current[0], keybindings: [{ key: 'Mod+Shift+J', when: 'global' }] }
+    ]
+    closed.rerender(<Menu />)
+    expect(screen.queryByTestId('shortcut')).toBeNull()
+    closed.unmount()
+  }
+  commands.current = []
   vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
   const keybindings = { 'terminal.toggleNativeChat': ['Mod+Shift+J', 'Mod+Alt+Y'] }
   useAppStore.setState({ keybindings, activeWorktreeId: 'main', settings: null })

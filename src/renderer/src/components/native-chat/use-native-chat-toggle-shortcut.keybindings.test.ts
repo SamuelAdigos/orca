@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { ActivePluginCommand } from '@/store/plugin-panels'
 import { findPluginCommandForKeybinding } from '@/lib/plugin-command-keybindings'
+import type { ShortcutDispatchInput } from '@/app-shell/app-command-handlers'
+import { executableNativeChatToggleBindings } from './native-chat-shortcut'
 import type { KeybindingOverrides } from '../../../../shared/keybindings'
 
 const toggleTabViewMode = vi.hoisted(() => vi.fn())
@@ -13,8 +15,9 @@ const store = vi.hoisted(
     keybindings: KeybindingOverrides
     agent: AgentType
     readable: boolean
+    platform: NodeJS.Platform
     commands: ActivePluginCommand[]
-  } => ({ keybindings: {}, agent: 'claude', readable: true, commands: [] })
+  } => ({ keybindings: {}, agent: 'claude', readable: true, commands: [], platform: 'darwin' })
 )
 
 vi.mock('../../store', () => ({
@@ -39,7 +42,7 @@ vi.mock('@/lib/native-chat-transcript-readability', () => ({
 }))
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdFromState: () => null }))
 vi.mock('@/store/plugin-panels', () => ({ usePluginCommands: () => store.commands }))
-vi.mock('@/lib/shortcut-platform', () => ({ getShortcutPlatform: () => 'darwin' }))
+vi.mock('@/lib/shortcut-platform', () => ({ getShortcutPlatform: () => store.platform }))
 
 import { addAppKeyListener, removeAppKeyListener } from '@/lib/app-keyboard-router'
 import { useNativeChatToggleShortcut } from './use-native-chat-toggle-shortcut'
@@ -62,6 +65,7 @@ describe('native chat toggle follows the user keybindings', () => {
     store.agent = 'claude'
     store.readable = true
     store.commands = []
+    store.platform = 'darwin'
     renderHook(() => useNativeChatToggleShortcut('wt-main', true))
   })
 
@@ -189,48 +193,93 @@ describe('native chat toggle follows the user keybindings', () => {
     expect(toggleTabViewMode).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])('lets an executable plugin own app input, plugin-first=%s', (first) => {
-    cleanup()
-    store.keybindings = { 'terminal.toggleNativeChat': ['Mod+Alt+Y'] }
-    store.commands = [
-      {
-        pluginKey: 'test.plugin',
-        pluginName: 'Test',
-        id: 'open',
-        title: 'Open',
-        context: 'worktree',
-        handler: { type: 'built-in', action: 'view.tasks' },
-        keybindings: [{ key: 'Mod+Alt+Y', when: 'global' }]
+  it.each([true, false])(
+    'lets the enabled plugin own File Search input, plugin-first=%s',
+    (first) => {
+      cleanup()
+      store.platform = 'win32'
+      const target = document.createElement('input')
+      target.setAttribute('data-file-search-input', '')
+      document.body.append(target)
+      store.keybindings = { 'terminal.toggleNativeChat': ['Mod+Alt+Y', 'Mod+Alt+K'] }
+      store.commands = [
+        {
+          pluginKey: 'test.plugin',
+          pluginName: 'Test',
+          id: 'open',
+          title: 'Open',
+          context: 'worktree',
+          handler: { type: 'built-in', action: 'view.tasks' },
+          keybindings: [{ key: 'Mod+Alt+Y', when: 'global' }]
+        }
+      ]
+      const pluginAction = vi.fn()
+      const owner = (event: KeyboardEvent) => {
+        const input: ShortcutDispatchInput = {
+          key: event.key,
+          code: event.code,
+          metaKey: event.metaKey,
+          ctrlKey: event.ctrlKey,
+          altKey: event.altKey,
+          shiftKey: event.shiftKey,
+          isComposing: event.isComposing,
+          altGraph: event.getModifierState('AltGraph'),
+          target: event.target,
+          defaultPrevented: event.defaultPrevented,
+          preventDefault: () => event.preventDefault()
+        }
+        if (
+          !event.defaultPrevented &&
+          findPluginCommandForKeybinding(
+            store.commands,
+            input,
+            store.platform,
+            store.keybindings,
+            true,
+            {
+              context: 'app',
+              target: event.target
+            }
+          )
+        ) {
+          pluginAction()
+          event.preventDefault()
+        }
       }
-    ]
-    const pluginAction = vi.fn()
-    const owner = (event: KeyboardEvent) => {
-      if (
-        !event.defaultPrevented &&
-        findPluginCommandForKeybinding(store.commands, event, 'darwin', store.keybindings, true, {
-          context: 'app',
-          target: event.target
+      if (first) {
+        addAppKeyListener('keydown', owner)
+      }
+      renderHook(() => useNativeChatToggleShortcut('wt-main', true))
+      if (!first) {
+        addAppKeyListener('keydown', owner)
+      }
+      try {
+        const event = new KeyboardEvent('keydown', {
+          key: 'y',
+          code: 'KeyY',
+          ctrlKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true
         })
-      ) {
-        pluginAction()
-        event.preventDefault()
+        Object.defineProperty(event, 'getModifierState', { value: () => false })
+        target.dispatchEvent(event)
+        expect(pluginAction).toHaveBeenCalledTimes(1)
+        expect(toggleTabViewMode).not.toHaveBeenCalled()
+        expect(event.defaultPrevented).toBe(true)
+        expect(
+          executableNativeChatToggleBindings(store.platform, store.keybindings, {
+            target,
+            pluginCommands: store.commands,
+            hasActiveWorktree: true
+          })
+        ).toEqual(['Mod+Alt+K'])
+      } finally {
+        removeAppKeyListener('keydown', owner)
+        target.remove()
       }
     }
-    if (first) {
-      addAppKeyListener('keydown', owner)
-    }
-    renderHook(() => useNativeChatToggleShortcut('wt-main', true))
-    if (!first) {
-      addAppKeyListener('keydown', owner)
-    }
-    try {
-      press('y', { metaKey: true, altKey: true })
-      expect(pluginAction).toHaveBeenCalledTimes(1)
-      expect(toggleTabViewMode).not.toHaveBeenCalled()
-    } finally {
-      removeAppKeyListener('keydown', owner)
-    }
-  })
+  )
 
   it('does nothing and keeps the chord when unbound', () => {
     store.keybindings = { 'terminal.toggleNativeChat': [] }
