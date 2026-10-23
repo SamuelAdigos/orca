@@ -23,6 +23,7 @@ type TerminalContextMenuTrigger = {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>
   point: { x: number; y: number }
   menuOpenedAtRef: React.RefObject<number>
+  shortcutTarget: Element | null
   onContextMenuCapture: (event: React.MouseEvent<HTMLDivElement>) => void
   onMouseDownCapture: (event: React.MouseEvent<HTMLDivElement>) => void
   onPaneTitleContextMenu: (event: React.MouseEvent<HTMLElement>, paneId: number) => void
@@ -36,6 +37,7 @@ export function useTerminalContextMenuTrigger({
   pasteResolvedPane
 }: UseTerminalContextMenuTriggerDeps): TerminalContextMenuTrigger {
   const menuOpenedAtRef = useRef(0)
+  const [shortcutTarget, setShortcutTarget] = useState<Element | null>(null)
   const [open, setOpen] = useState(false)
   const [point, setPoint] = useState({ x: 0, y: 0 })
 
@@ -89,6 +91,7 @@ export function useTerminalContextMenuTrigger({
       return
     }
 
+    setShortcutTarget(event.currentTarget.ownerDocument.activeElement ?? event.currentTarget)
     menuOpenedAtRef.current = Date.now()
     const bounds = boundsElement.getBoundingClientRect()
     setPoint({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })
@@ -137,6 +140,7 @@ export function useTerminalContextMenuTrigger({
     setOpen,
     point,
     menuOpenedAtRef,
+    shortcutTarget,
     onContextMenuCapture,
     onMouseDownCapture,
     onPaneTitleContextMenu

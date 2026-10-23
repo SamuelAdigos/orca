@@ -27,11 +27,9 @@ import {
 import { shouldIgnoreTerminalMenuPointerDownOutside } from './terminal-context-menu-dismiss'
 import type { TerminalQuickCommand } from '../../../../shared/terminal-quick-command-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import {
-  formatOptionalPrimaryShortcutLabel,
-  formatPrimaryShortcutLabel
-} from '@/hooks/useShortcutLabel'
+import { formatPrimaryShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { KeybindingOverrides } from '../../../../shared/keybindings'
+import { useNativeChatToggleShortcutLabel } from '../native-chat/native-chat-shortcut'
 import { translate } from '@/i18n/i18n'
 import { AgentSessionContinuationMenuItem } from './AgentSessionContinuationMenuItem'
 import { AgentSessionContextCopyMenuItem } from './AgentSessionContextCopyMenuItem'
@@ -52,6 +50,8 @@ type TerminalContextMenuProps = {
   onPaste: () => void
   onSplitRight: () => void
   onSplitDown: () => void
+  shortcutOwnerPresent?: boolean
+  shortcutTarget?: EventTarget | null
   keybindings: KeybindingOverrides
   canEqualizePaneSizes: boolean
   onEqualizePaneSizes: () => void
@@ -145,6 +145,8 @@ function TerminalContextMenuItems({
   onSplitRight,
   onSplitDown,
   keybindings,
+  shortcutTarget = null,
+  shortcutOwnerPresent = false,
   canEqualizePaneSizes,
   onEqualizePaneSizes,
   onClosePane,
@@ -172,6 +174,7 @@ function TerminalContextMenuItems({
   canCopyAgentSessionId,
   onCopyAgentSessionId
 }: TerminalContextMenuProps): React.JSX.Element {
+  const nativeChatShortcut = useNativeChatToggleShortcutLabel(shortcutTarget, shortcutOwnerPresent)
   // Why: one primary binding prevents Windows/Linux shortcut labels from forcing row wraps.
   const shortcuts = useMemo(
     () => ({
@@ -184,8 +187,7 @@ function TerminalContextMenuItems({
       expand: formatPrimaryShortcutLabel('terminal.expandPane', keybindings),
       setTitle: formatPrimaryShortcutLabel('terminal.setTitle', keybindings),
       clearPaneTitle: formatPrimaryShortcutLabel('terminal.clearPaneTitle', keybindings),
-      close: formatPrimaryShortcutLabel('terminal.closePane', keybindings),
-      nativeChat: formatOptionalPrimaryShortcutLabel('terminal.toggleNativeChat', keybindings)
+      close: formatPrimaryShortcutLabel('terminal.closePane', keybindings)
     }),
     [keybindings]
   )
@@ -241,8 +243,8 @@ function TerminalContextMenuItems({
                 'components.tab.bar.SortableTabContextMenu.switchToChatView',
                 'Continue in Chat UI'
               )}
-          {shortcuts.nativeChat ? (
-            <DropdownMenuShortcut>{shortcuts.nativeChat}</DropdownMenuShortcut>
+          {nativeChatShortcut ? (
+            <DropdownMenuShortcut>{nativeChatShortcut}</DropdownMenuShortcut>
           ) : null}
         </DropdownMenuItem>
       ) : null}

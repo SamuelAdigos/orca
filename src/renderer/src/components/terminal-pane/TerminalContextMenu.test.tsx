@@ -1,8 +1,11 @@
+// @vitest-environment happy-dom
 import React from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TerminalContextMenu from './TerminalContextMenu'
 import { translate } from '@/i18n/i18n'
+import { getDefaultSettings } from '../../../../shared/constants'
+import { useAppStore } from '@/store'
 import type { KeybindingOverrides } from '../../../../shared/keybindings'
 
 type ItemProps = { onSelect?: () => void; children?: React.ReactNode }
@@ -73,6 +76,7 @@ function renderMenu(overrides: Record<string, unknown> = {}): string {
     onPaste: vi.fn(),
     onSplitRight: vi.fn(),
     onSplitDown: vi.fn(),
+    shortcutOwnerPresent: true,
     keybindings: {},
     canEqualizePaneSizes: false,
     onEqualizePaneSizes: vi.fn(),
@@ -104,7 +108,9 @@ function renderMenu(overrides: Record<string, unknown> = {}): string {
     onCopyAgentSessionId: vi.fn(),
     ...overrides
   }
-  return renderToStaticMarkup(React.createElement(TerminalContextMenu, props))
+  cleanup()
+  useAppStore.setState({ keybindings: props.keybindings })
+  return render(React.createElement(TerminalContextMenu, props)).container.innerHTML
 }
 
 describe('TerminalContextMenu', () => {
@@ -112,10 +118,12 @@ describe('TerminalContextMenu', () => {
     vi.mocked(translate).mockClear()
     items.list = []
     shortcuts.list = []
+    useAppStore.setState({ settings: null })
     vi.stubGlobal('navigator', { userAgent: 'Linux' })
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -213,9 +221,35 @@ describe('TerminalContextMenu', () => {
       labels.some((shortcut) => shortcut.endsWith('J') || shortcut === 'Unassigned')
 
     expect(chatItemShortcut({ 'terminal.toggleNativeChat': ['Mod+Alt+C'] })).toContain('Ctrl+Alt+C')
-    // Linux starts unbound, so the menu must not advertise Switch worktree's Ctrl+Shift+J.
+    // The native palette wins this chord in app context.
     expect(hasToggleLabel(chatItemShortcut({}))).toBe(false)
     expect(hasToggleLabel(chatItemShortcut({ 'terminal.toggleNativeChat': [] }))).toBe(false)
+  })
+
+  it('refreshes executable hints with unchanged bindings and explicit floating ownership', () => {
+    const keybindings = { 'terminal.toggleNativeChat': ['Mod+Shift+J', 'Mod+Alt+Y'] }
+    const target = Object.assign(document.createElement('textarea'), {
+      className: 'xterm-helper-textarea'
+    })
+    const labels = (owner: boolean): string[] => {
+      shortcuts.list = []
+      renderMenu({
+        keybindings,
+        canToggleNativeChat: true,
+        shortcutTarget: target,
+        shortcutOwnerPresent: owner
+      })
+      return shortcuts.list
+    }
+    expect(labels(true)).toContain('Ctrl+Alt+Y')
+    const settings = {
+      ...getDefaultSettings('/tmp'),
+      terminalShortcutPolicy: 'terminal-first' as const
+    }
+    act(() => useAppStore.setState({ settings }))
+    expect(labels(true)).toContain('Ctrl+Shift+J')
+    expect(labels(false)).not.toContain('Ctrl+Shift+J')
+    expect(labels(false)).not.toContain('Ctrl+Alt+Y')
   })
 
   it('shows one shortcut per terminal menu action on Windows', () => {

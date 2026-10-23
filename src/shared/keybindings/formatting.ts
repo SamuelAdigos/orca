@@ -3,13 +3,22 @@ import type {
   KeybindingActionId,
   KeybindingConflict,
   KeybindingDefinition,
+  KeybindingInput,
   KeybindingOverrides,
   ModifierToken,
   KeybindingScope
 } from './types'
 import { KEYBINDING_DEFINITIONS, isDigitIndexActionId, isKeybindingActionId } from './definitions'
 import { parseKeybinding } from './parser'
-import { getEffectiveKeybindingsForAction, getEffectiveKeybindingsForDefinition } from './effective'
+import { matchesRecentTabSwitcherChord } from '../window-shortcut-policy'
+import { keybindingInputForBinding, isNativeMacPasteInput } from './matching-key'
+import {
+  getEffectiveKeybindingsForAction,
+  getEffectiveKeybindingsForDefinition,
+  getDefaultBindings,
+  keybindingConflictGroups,
+  bindingsOverlap
+} from './effective'
 import { isDoubleTapBinding } from './normalization'
 import { getKeybindingConflictIdentity, keybindingConflictIdentities } from './matching'
 
@@ -141,6 +150,7 @@ export function findKeybindingConflictsForDefinitions(
   overrides?: KeybindingOverrides,
   options: FindKeybindingConflictOptions = {}
 ): KeybindingConflict[] {
+  const byId = new Map(definitions.map((definition) => [definition.id, definition]))
   const owners = new Map<string, { binding: string; actionIds: Set<KeybindingActionId> }>()
   const ignoredActionIds = new Set(options.ignoredActionIds ?? [])
   const customizedActions = new Set(
@@ -158,12 +168,14 @@ export function findKeybindingConflictsForDefinitions(
     if (ignoredActionIds.has(definition.id)) {
       continue
     }
-    for (const binding of getEffectiveKeybindingsForDefinition(definition, platform, overrides)) {
-      const groups = new Set([definition.conflictGroup ?? definition.scope])
-      if (definition.conflictGroup) {
-        // Why: native menu accelerators can consume global chords, so check custom bindings against both the menu bucket and scope.
-        groups.add(definition.scope)
-      }
+    for (const binding of getEffectiveKeybindingsForDefinition(
+      definition,
+      platform,
+      overrides,
+      options.savedOverrides,
+      definitions
+    )) {
+      const groups = new Set(keybindingConflictGroups(definition))
       for (const group of groups) {
         for (const identity of keybindingConflictIdentities(definition.id, binding, platform)) {
           const conflictKey = `${group}\u0000${identity}`
@@ -182,13 +194,32 @@ export function findKeybindingConflictsForDefinitions(
   }
 
   const seenConflictKeys = new Set<string>()
-  return Array.from(owners.values())
+  const conflicts = Array.from(owners.values())
     .filter(({ actionIds }) => actionIds.size > 1 && setIntersects(actionIds, customizedActions))
     .map(({ binding, actionIds }) => ({
       binding,
-      actionIds: Array.from(actionIds)
+      actionIds: Array.from(actionIds).filter((id) => {
+        const definition = byId.get(id)
+        return (
+          !definition?.implicitDefaultYields ||
+          Object.hasOwn(overrides ?? {}, id) ||
+          !Array.from(actionIds).every((otherId) => {
+            const other = byId.get(otherId)
+            return (
+              otherId === id ||
+              (other &&
+                getDefaultBindings(other, platform).some((ownDefault) =>
+                  bindingsOverlap(definition, binding, other, ownDefault, platform)
+                ))
+            )
+          })
+        )
+      })
     }))
     .filter((conflict) => {
+      if (conflict.actionIds.length < 2) {
+        return false
+      }
       const key = `${conflict.binding}\u0000${conflict.actionIds.join('\u0000')}`
       if (seenConflictKeys.has(key)) {
         return false
@@ -196,6 +227,18 @@ export function findKeybindingConflictsForDefinitions(
       seenConflictKeys.add(key)
       return true
     })
+  for (const binding of overrides?.['terminal.toggleNativeChat'] ?? []) {
+    if (
+      isNativeChatToggleInputReserved(
+        keybindingInputForBinding(binding, platform),
+        platform,
+        overrides
+      )
+    ) {
+      conflicts.push({ binding, actionIds: ['terminal.toggleNativeChat'] })
+    }
+  }
+  return conflicts
 }
 
 function setIntersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
@@ -205,4 +248,15 @@ function setIntersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean 
     }
   }
   return false
+}
+
+export function isNativeChatToggleInputReserved(
+  input: KeybindingInput,
+  platform: NodeJS.Platform,
+  overrides?: KeybindingOverrides
+): boolean {
+  return (
+    isNativeMacPasteInput(input, platform) ||
+    matchesRecentTabSwitcherChord(input, platform, overrides)
+  )
 }

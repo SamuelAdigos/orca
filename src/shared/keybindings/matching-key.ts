@@ -1,6 +1,6 @@
 import type { KeybindingInput, ModifierToken, ParsedKeybinding } from './types'
 import { getKeybindingPlatform } from './definitions'
-import { hasModifier } from './parser'
+import { hasModifier, parseKeybinding } from './parser'
 import {
   canFallBackToPhysicalCode,
   logicalKeyTokenFromInput,
@@ -189,4 +189,35 @@ export function resolveModifierToken(
     case 'Shift':
       return 'shift'
   }
+}
+
+export function keybindingInputForBinding(
+  binding: string,
+  platform: NodeJS.Platform
+): KeybindingInput {
+  const parsed = parseKeybinding(binding)
+  if (!parsed) {
+    return {}
+  }
+  if (parsed.doubleTapModifier) {
+    return { doubleTapModifier: resolveModifierToken(parsed.doubleTapModifier, platform) }
+  }
+  return {
+    key: parsed.key,
+    code: parsed.key === 'Tab' ? 'Tab' : undefined,
+    ...platformModifiers(parsed, platform)
+  }
+}
+
+export function isNativeMacPasteInput(input: KeybindingInput, platform: NodeJS.Platform): boolean {
+  return (
+    platform === 'darwin' &&
+    !input.doubleTapModifier &&
+    hasModifier(input, 'meta') &&
+    !hasModifier(input, 'control') &&
+    !hasModifier(input, 'alt') &&
+    !hasModifier(input, 'shift') &&
+    // Why: produced keys win over physical codes on remapped layouts, with physical fallback for IME/non-Latin keys.
+    (logicalKeyTokenFromInput(input) ?? physicalCodeKeyTokenFromInput(input)) === 'V'
+  )
 }

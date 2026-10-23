@@ -2,10 +2,20 @@
 
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentType } from '../../../../shared/agent-status-types'
+import type { ActivePluginCommand } from '@/store/plugin-panels'
+import { findPluginCommandForKeybinding } from '@/lib/plugin-command-keybindings'
 import type { KeybindingOverrides } from '../../../../shared/keybindings'
 
 const toggleTabViewMode = vi.hoisted(() => vi.fn())
-const store = vi.hoisted((): { keybindings: KeybindingOverrides } => ({ keybindings: {} }))
+const store = vi.hoisted(
+  (): {
+    keybindings: KeybindingOverrides
+    agent: AgentType
+    readable: boolean
+    commands: ActivePluginCommand[]
+  } => ({ keybindings: {}, agent: 'claude', readable: true, commands: [] })
+)
 
 vi.mock('../../store', () => ({
   useAppStore: {
@@ -18,19 +28,20 @@ vi.mock('../../store', () => ({
       },
       tabsByWorktree: { 'wt-main': [{ id: 'terminal-1', title: 'claude' }] },
       terminalLayoutsByTabId: {},
-      agentStatusByPaneKey: {},
+      agentStatusByPaneKey: { 'terminal-1:leaf-1': { agentType: store.agent } },
       keybindings: store.keybindings,
       toggleTabViewMode
     })
   }
 }))
-vi.mock('./native-chat-availability', () => ({ canToggleNativeChat: () => true }))
 vi.mock('@/lib/native-chat-transcript-readability', () => ({
-  isNativeChatTranscriptLocalReadable: () => true
+  isNativeChatTranscriptLocalReadable: () => store.readable
 }))
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdFromState: () => null }))
+vi.mock('@/store/plugin-panels', () => ({ usePluginCommands: () => store.commands }))
 vi.mock('@/lib/shortcut-platform', () => ({ getShortcutPlatform: () => 'darwin' }))
 
+import { addAppKeyListener, removeAppKeyListener } from '@/lib/app-keyboard-router'
 import { useNativeChatToggleShortcut } from './use-native-chat-toggle-shortcut'
 
 function press(key: string, modifiers: KeyboardEventInit): KeyboardEvent {
@@ -48,6 +59,9 @@ function press(key: string, modifiers: KeyboardEventInit): KeyboardEvent {
 describe('native chat toggle follows the user keybindings', () => {
   beforeEach(() => {
     store.keybindings = {}
+    store.agent = 'claude'
+    store.readable = true
+    store.commands = []
     renderHook(() => useNativeChatToggleShortcut('wt-main', true))
   })
 
@@ -56,11 +70,39 @@ describe('native chat toggle follows the user keybindings', () => {
     toggleTabViewMode.mockClear()
   })
 
-  it('toggles on the default chord', () => {
-    const event = press('j', { metaKey: true, shiftKey: true })
-
-    expect(toggleTabViewMode.mock.calls).toEqual([['tab-1']])
-    expect(event.defaultPrevented).toBe(true)
+  it('routes a real modifier gesture once and stops later app owners', () => {
+    store.keybindings = { 'terminal.toggleNativeChat': ['DoubleTap+Alt'] }
+    const laterOwner = vi.fn()
+    addAppKeyListener('keydown', laterOwner)
+    const modifier = (type: string, altKey: boolean): KeyboardEvent => {
+      const event = new KeyboardEvent(type, {
+        key: 'Alt',
+        code: 'AltLeft',
+        altKey,
+        bubbles: true,
+        cancelable: true
+      })
+      document.body.dispatchEvent(event)
+      return event
+    }
+    try {
+      store.agent = 'gemini'
+      modifier('keydown', true)
+      modifier('keyup', false)
+      expect(modifier('keydown', true).defaultPrevented).toBe(false)
+      expect(toggleTabViewMode).not.toHaveBeenCalled()
+      window.dispatchEvent(new Event('blur'))
+      store.agent = 'claude'
+      modifier('keydown', true)
+      modifier('keyup', false)
+      laterOwner.mockClear()
+      const second = modifier('keydown', true)
+      expect(toggleTabViewMode.mock.calls).toEqual([['tab-1']])
+      expect(second.defaultPrevented).toBe(true)
+      expect(laterOwner).not.toHaveBeenCalled()
+    } finally {
+      removeAppKeyListener('keydown', laterOwner)
+    }
   })
 
   it('moves to an overridden chord and leaves the old one alone', () => {
@@ -70,8 +112,124 @@ describe('native chat toggle follows the user keybindings', () => {
     expect(toggleTabViewMode).not.toHaveBeenCalled()
     expect(oldChord.defaultPrevented).toBe(false)
 
-    press('c', { metaKey: true, altKey: true })
-    expect(toggleTabViewMode.mock.calls).toEqual([['tab-1']])
+    const laterOwner = vi.fn()
+    addAppKeyListener('keydown', laterOwner)
+    try {
+      expect(press('c', { metaKey: true, altKey: true }).defaultPrevented).toBe(true)
+      expect(toggleTabViewMode.mock.calls).toEqual([['tab-1']])
+      expect(laterOwner).not.toHaveBeenCalled()
+    } finally {
+      removeAppKeyListener('keydown', laterOwner)
+    }
+  })
+
+  it('preserves eligibility and ordinary chat-input reach without consuming refused input', () => {
+    store.agent = 'gemini'
+    expect(press('j', { metaKey: true, shiftKey: true }).defaultPrevented).toBe(false)
+    store.agent = 'grok'
+    store.readable = false
+    expect(press('j', { metaKey: true, shiftKey: true }).defaultPrevented).toBe(false)
+    expect(toggleTabViewMode).not.toHaveBeenCalled()
+    store.agent = 'codex'
+    const input = document.createElement('textarea')
+    const event = new KeyboardEvent('keydown', {
+      key: 'j',
+      code: 'KeyJ',
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true
+    })
+    document.body.append(input)
+    input.dispatchEvent(event)
+    input.remove()
+    expect(event.defaultPrevented).toBe(true)
+    expect(toggleTabViewMode).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses consumed/repeated/recorder input and resets interrupted gestures', () => {
+    expect(press('j', { metaKey: true, shiftKey: true, repeat: true }).defaultPrevented).toBe(false)
+    const consumed = new KeyboardEvent('keydown', {
+      key: 'j',
+      code: 'KeyJ',
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true
+    })
+    consumed.preventDefault()
+    document.body.dispatchEvent(consumed)
+    const recorder = document.createElement('button')
+    recorder.dataset.shortcutRecorderActive = ''
+    document.body.append(recorder)
+    recorder.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'j',
+        code: 'KeyJ',
+        metaKey: true,
+        shiftKey: true,
+        bubbles: true
+      })
+    )
+    recorder.remove()
+    store.keybindings = { 'terminal.toggleNativeChat': ['DoubleTap+Alt'] }
+    const modifier = (type: string) =>
+      document.body.dispatchEvent(
+        new KeyboardEvent(type, {
+          key: 'Alt',
+          code: 'AltLeft',
+          altKey: type === 'keydown',
+          bubbles: true
+        })
+      )
+    modifier('keydown')
+    modifier('keyup')
+    window.dispatchEvent(new Event('blur'))
+    modifier('keydown')
+    expect(toggleTabViewMode).not.toHaveBeenCalled()
+  })
+
+  it.each([true, false])('lets an executable plugin own app input, plugin-first=%s', (first) => {
+    cleanup()
+    store.keybindings = { 'terminal.toggleNativeChat': ['Mod+Alt+Y'] }
+    store.commands = [
+      {
+        pluginKey: 'test.plugin',
+        pluginName: 'Test',
+        id: 'open',
+        title: 'Open',
+        context: 'worktree',
+        handler: { type: 'built-in', action: 'view.tasks' },
+        keybindings: [{ key: 'Mod+Alt+Y', when: 'global' }]
+      }
+    ]
+    const pluginAction = vi.fn()
+    const owner = (event: KeyboardEvent) => {
+      if (
+        !event.defaultPrevented &&
+        findPluginCommandForKeybinding(store.commands, event, 'darwin', store.keybindings, true, {
+          context: 'app',
+          target: event.target
+        })
+      ) {
+        pluginAction()
+        event.preventDefault()
+      }
+    }
+    if (first) {
+      addAppKeyListener('keydown', owner)
+    }
+    renderHook(() => useNativeChatToggleShortcut('wt-main', true))
+    if (!first) {
+      addAppKeyListener('keydown', owner)
+    }
+    try {
+      press('y', { metaKey: true, altKey: true })
+      expect(pluginAction).toHaveBeenCalledTimes(1)
+      expect(toggleTabViewMode).not.toHaveBeenCalled()
+    } finally {
+      removeAppKeyListener('keydown', owner)
+    }
   })
 
   it('does nothing and keeps the chord when unbound', () => {

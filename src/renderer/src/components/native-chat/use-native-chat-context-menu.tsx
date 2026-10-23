@@ -22,9 +22,8 @@ import {
   readNativeChatCopyImage,
   type NativeChatCopyImage
 } from './native-chat-image-copy'
-import { isMacPlatform } from './native-chat-shortcut'
-import { formatOptionalPrimaryShortcutLabel } from '@/hooks/useShortcutLabel'
-import { useAppStore } from '@/store'
+import { isEventTargetInsideFloatingWorkspacePanel } from '@/lib/floating-workspace-terminal-actions'
+import { isMacPlatform, useNativeChatToggleShortcutLabel } from './native-chat-shortcut'
 import { TabWorkspaceLayoutMenuSection } from '@/components/tab-bar/TabWorkspaceLayoutMenuSection'
 import { canMoveTabToNewPaneColumn } from '@/components/tab-bar/tab-move-to-pane-column'
 import { isEditableTarget } from '@/lib/editable-target'
@@ -166,8 +165,10 @@ export function useNativeChatContextMenu({
     target: noNativeChatContextMenuTarget,
     returnFocusTo: null
   })
-  const keybindings = useAppStore((s) => s.keybindings)
-  const shortcutLabel = formatOptionalPrimaryShortcutLabel('terminal.toggleNativeChat', keybindings)
+  const shortcutLabel = useNativeChatToggleShortcutLabel(
+    state.returnFocusTo ?? rootRef.current,
+    !isEventTargetInsideFloatingWorkspacePanel(rootRef.current)
+  )
   const { image, target } = state
   // Copy, Copy image, Paste and the target rows each show only when they apply to what was right-clicked.
   const hasSelection = state.selectedText.trim().length > 0

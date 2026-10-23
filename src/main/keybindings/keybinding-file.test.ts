@@ -2,7 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { LEGACY_TAB_SWITCH_BINDINGS } from '../../shared/keybindings'
+import {
+  getEffectiveKeybindingsForAction,
+  LEGACY_TAB_SWITCH_BINDINGS
+} from '../../shared/keybindings'
 import {
   getUserKeybindingsPath,
   migrateLegacyKeybindings,
@@ -23,6 +26,97 @@ describe('keybinding-file', () => {
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
   })
+
+  it('keeps old navigation aliases and derives restoration without a saved toggle disable', () => {
+    const aliases = ['Cmd+Shift+J', 'Mod+Alt+Y']
+    writeFileSync(filePath, JSON.stringify({ keybindings: { 'worktree.navigateDown': aliases } }))
+    const loaded = readKeybindingFile(filePath, 'darwin')
+    expect(loaded.diagnostics).toEqual([])
+    expect(loaded.overrides['worktree.navigateDown']).toEqual(aliases)
+    expect(loaded.overrides).not.toHaveProperty('terminal.toggleNativeChat')
+    expect(
+      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', loaded.overrides)
+    ).toEqual([])
+    const disabled = writeKeybindingOverride(filePath, 'darwin', 'worktree.navigateDown', [])
+    expect(
+      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', disabled.overrides)
+    ).toEqual(['Mod+Shift+J'])
+    const reset = writeKeybindingOverride(filePath, 'darwin', 'worktree.navigateDown', null)
+    expect(reset.overrides['worktree.navigateDown']).toEqual(aliases)
+    expect(
+      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', reset.overrides)
+    ).toEqual([])
+  })
+
+  it('validates new claims against saved provenance, retains reset intent, and isolates reservations', () => {
+    writeFileSync(filePath, JSON.stringify({ keybindings: {} }))
+    expect(() =>
+      writeKeybindingOverride(filePath, 'darwin', 'worktree.navigateDown', ['Mod+Shift+J'])
+    ).toThrow('conflicts')
+    writeFileSync(
+      filePath,
+      JSON.stringify({ keybindings: { 'worktree.navigateDown': ['Mod+Shift+J', 'Mod+Alt+Y'] } })
+    )
+    writeKeybindingOverride(filePath, 'darwin', 'terminal.toggleNativeChat', ['Mod+Alt+K'])
+    const reset = writeKeybindingOverride(filePath, 'darwin', 'terminal.toggleNativeChat', null)
+    expect(reset.overrides).not.toHaveProperty('terminal.toggleNativeChat')
+    expect(
+      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', reset.overrides)
+    ).toEqual([])
+    expect(() =>
+      writeKeybindingOverride(filePath, 'darwin', 'terminal.toggleNativeChat', ['Cmd+Shift+J'])
+    ).toThrow('conflicts')
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        keybindings: {
+          'terminal.toggleNativeChat': ['Mod+Alt+K'],
+          'worktree.navigateDown': ['Mod+Shift+J']
+        }
+      })
+    )
+    expect(() =>
+      writeKeybindingOverride(filePath, 'darwin', 'terminal.toggleNativeChat', ['Mod+Shift+J'])
+    ).toThrow('conflicts')
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        keybindings: { 'terminal.paste': [], 'terminal.toggleNativeChat': ['Mod+V'] }
+      })
+    )
+    const reserved = readKeybindingFile(filePath, 'darwin')
+    expect(reserved.overrides['terminal.paste']).toEqual([])
+    expect(reserved.overrides).not.toHaveProperty('terminal.toggleNativeChat')
+    writeFileSync(
+      filePath,
+      JSON.stringify({ keybindings: { 'worktree.navigateDown': ['Mod+Shift+J', 'Mod+P'] } })
+    )
+    const invalid = readKeybindingFile(filePath, 'darwin')
+    expect(invalid.overrides).not.toHaveProperty('worktree.navigateDown')
+    expect(
+      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', invalid.overrides)
+    ).toEqual(['Mod+Shift+J'])
+  })
+
+  it.each(['win32', 'linux'] as const)(
+    'keeps %s palette default plus a free alias without excusing unrelated claims',
+    (platform) => {
+      const palette = ['Mod+Shift+J', 'Mod+Alt+Y']
+      writeFileSync(filePath, JSON.stringify({ keybindings: { 'worktree.palette': palette } }))
+      const loaded = readKeybindingFile(filePath, platform)
+      expect(loaded.diagnostics).toEqual([])
+      expect(loaded.overrides['worktree.palette']).toEqual(palette)
+      expect(
+        getEffectiveKeybindingsForAction('terminal.toggleNativeChat', platform, loaded.overrides)
+      ).toEqual(['Mod+Shift+J'])
+      expect(() =>
+        writeKeybindingOverride(filePath, platform, 'terminal.toggleNativeChat', ['Ctrl+Shift+J'])
+      ).toThrow('conflicts')
+      expect(() =>
+        writeKeybindingOverride(filePath, platform, 'worktree.navigateDown', ['Mod+Alt+Y'])
+      ).toThrow('conflicts')
+    }
+  )
 
   it('resolves the user-facing keybindings path under ~/.orca', () => {
     expect(getUserKeybindingsPath('/home/test')).toBe(

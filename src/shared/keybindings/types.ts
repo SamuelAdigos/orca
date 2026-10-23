@@ -159,6 +159,8 @@ export type KeybindingDefinition = {
   allowBareKeybindings?: boolean
   allowShiftOnlyKeybindings?: boolean
   conflictGroup?: string
+  conflictGroups?: readonly KeybindingScope[]
+  implicitDefaultYields?: boolean
 }
 
 export type ModifierToken = 'Mod' | 'Cmd' | 'Ctrl' | 'Alt' | 'Shift'
@@ -202,6 +204,7 @@ export type KeybindingConflict = {
 }
 
 export type FindKeybindingConflictOptions = {
+  savedOverrides?: KeybindingOverrides
   ignoredActionIds?: Iterable<KeybindingActionId>
   relevantActionIds?: Iterable<KeybindingActionId>
 }

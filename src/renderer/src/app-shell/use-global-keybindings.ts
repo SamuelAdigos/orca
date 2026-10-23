@@ -223,7 +223,8 @@ export function useGlobalKeybindings(args: {
           input,
           shortcutPlatform,
           keybindings,
-          Boolean(activeWorktreeId)
+          Boolean(activeWorktreeId),
+          { context, terminalShortcutPolicy, target: input.target }
         )
         if (pluginCommand) {
           input.preventDefault()

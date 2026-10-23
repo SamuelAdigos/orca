@@ -55,6 +55,7 @@ type TerminalMenuState = {
   setOpen: React.Dispatch<React.SetStateAction<boolean>>
   point: { x: number; y: number }
   menuOpenedAtRef: React.RefObject<number>
+  shortcutTarget: Element | null
   paneCount: number
   menuPaneId: number | null
   onContextMenuCapture: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -138,6 +139,7 @@ export function useTerminalPaneContextMenu({
     setOpen,
     point,
     menuOpenedAtRef,
+    shortcutTarget,
     onContextMenuCapture,
     onMouseDownCapture,
     onPaneTitleContextMenu
@@ -302,6 +304,7 @@ export function useTerminalPaneContextMenu({
     setOpen,
     point,
     menuOpenedAtRef,
+    shortcutTarget,
     paneCount,
     menuPaneId,
     onContextMenuCapture,

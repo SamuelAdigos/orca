@@ -102,13 +102,21 @@ export function writeWebKeybindingAction(
   const currentSnapshot = getWebKeybindingSnapshot()
   const candidateOverrides = { ...currentSnapshot.overrides }
   if (normalizedBindings === null) {
-    delete candidateOverrides[actionId]
+    const common = currentSnapshot.commonOverrides[actionId]
+    if (common) {
+      candidateOverrides[actionId] = common
+    } else {
+      delete candidateOverrides[actionId]
+    }
   } else {
     candidateOverrides[actionId] = normalizedBindings
   }
-  const blockingConflict = findKeybindingConflicts(platform, candidateOverrides).find((conflict) =>
-    conflict.actionIds.includes(actionId)
-  )
+  const blockingConflict = findKeybindingConflicts(platform, candidateOverrides, {
+    savedOverrides:
+      normalizedBindings === null
+        ? { ...currentSnapshot.overrides, [actionId]: currentSnapshot.commonOverrides[actionId] }
+        : currentSnapshot.overrides
+  }).find((conflict) => conflict.actionIds.includes(actionId))
   if (blockingConflict) {
     throw new Error(
       `${formatKeybindingList([blockingConflict.binding], platform)} conflicts with another shortcut.`

@@ -3,10 +3,17 @@ import {
   getEffectiveKeybindingsForDefinition,
   keybindingMatchesInput,
   type KeybindingDefinition,
+  type KeybindingMatchOptions,
   type KeybindingInput,
   type KeybindingOverrides,
   type PluginKeybindingActionId
 } from '../../../shared/keybindings'
+import { fileSearchClaimsTextKey } from './file-search-shortcut-policy'
+import {
+  isFloatingWorkspacePanelFocused,
+  isFloatingWorkspaceTerminalInputTarget,
+  matchFloatingWorkspacePanelChord
+} from './floating-workspace-terminal-actions'
 import { translate } from '@/i18n/i18n'
 import { pluginCommandKeybindingActionId as sharedPluginCommandKeybindingActionId } from '../../../shared/plugins/plugin-command-actions'
 
@@ -58,8 +65,19 @@ export function findPluginCommandForKeybinding(
   input: KeybindingInput,
   platform: NodeJS.Platform,
   overrides: KeybindingOverrides | undefined,
-  hasActiveWorktree: boolean
+  hasActiveWorktree: boolean,
+  context?: KeybindingMatchOptions & { target: EventTarget | null }
 ): ActivePluginCommand | null {
+  if (
+    context &&
+    (context.context !== 'app' ||
+      fileSearchClaimsTextKey({ ...input, target: context.target }) ||
+      isFloatingWorkspaceTerminalInputTarget(context.target) ||
+      (isFloatingWorkspacePanelFocused() &&
+        matchFloatingWorkspacePanelChord(input, platform, null, overrides, context) !== null))
+  ) {
+    return null
+  }
   for (const command of commands) {
     if (command.context === 'worktree' && !hasActiveWorktree) {
       continue

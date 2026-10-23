@@ -29,6 +29,7 @@ import {
 import type { TerminalPaneController } from './use-terminal-pane-controller'
 import { useAppStore } from '@/store'
 import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 
 export function TerminalPaneSurface({
@@ -260,6 +261,8 @@ export function TerminalPaneSurface({
         onPaste={() => void contextMenu.onPaste()}
         onSplitRight={contextMenu.onSplitRight}
         onSplitDown={contextMenu.onSplitDown}
+        shortcutOwnerPresent={worktreeId !== FLOATING_TERMINAL_WORKTREE_ID}
+        shortcutTarget={contextMenu.shortcutTarget}
         keybindings={keybindings}
         onEqualizePaneSizes={contextMenu.onEqualizePaneSizes}
         onClosePane={contextMenu.onClosePane}
