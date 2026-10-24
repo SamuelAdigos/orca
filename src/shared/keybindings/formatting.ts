@@ -15,7 +15,9 @@ import {
   getEffectiveKeybindingsForDefinition,
   getDefaultBindings,
   keybindingConflictGroups,
-  bindingsOverlap
+  bindingsOverlap,
+  isKeybindingInterceptedBeforeBrowserChords,
+  isKeybindingInterceptedByMainProcess
 } from './effective'
 import { isDoubleTapBinding } from './normalization'
 
@@ -161,6 +163,7 @@ export function findKeybindingConflictsForDefinitions(
       customizedActions.add(actionId)
     }
   }
+  const scopes = new Set(definitions.map((definition) => definition.scope))
   for (const definition of definitions) {
     if (ignoredActionIds.has(definition.id)) {
       continue
@@ -172,6 +175,17 @@ export function findKeybindingConflictsForDefinitions(
       definitions
     )) {
       const groups = new Set(keybindingConflictGroups(definition))
+      // Why: main consumes these before renderer handlers run, but a focused browser guest runs its own chords ahead of the after-browser ones.
+      if (
+        options.includeMainProcessInterception &&
+        isKeybindingInterceptedByMainProcess(definition)
+      ) {
+        for (const scope of scopes) {
+          if (scope !== 'browser' || isKeybindingInterceptedBeforeBrowserChords(definition)) {
+            groups.add(scope)
+          }
+        }
+      }
       for (const group of groups) {
         for (const identity of keybindingConflictIdentities(definition.id, binding, platform)) {
           const conflictKey = `${group}\u0000${identity}`
@@ -191,7 +205,16 @@ export function findKeybindingConflictsForDefinitions(
 
   const seenConflictKeys = new Set<string>()
   return Array.from(owners.values())
-    .filter(({ actionIds }) => actionIds.size > 1 && setIntersects(actionIds, customizedActions))
+    .filter(
+      ({ actionIds }) =>
+        actionIds.size > 1 &&
+        // Why: the two digit ranges may share a modifier on purpose (see tab.selectByIndex's definition).
+        !(
+          options.includeMainProcessInterception &&
+          Array.from(actionIds).every(isDigitIndexActionId)
+        ) &&
+        setIntersects(actionIds, customizedActions)
+    )
     .map(({ binding, actionIds }) => ({
       binding,
       actionIds: Array.from(actionIds).filter((id) => {
