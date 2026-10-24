@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   findKeybindingConflicts,
   getEffectiveKeybindingsForAction,
+  findKeybindingConflictsForDefinitions,
+  KEYBINDING_DEFINITIONS,
   type KeybindingOverrides
 } from '../../../../shared/keybindings'
 import {
@@ -10,10 +12,6 @@ import {
   matchesNativeChatToggleShortcut
 } from './native-chat-shortcut'
 import type { ActivePluginCommand } from '@/store/plugin-panels'
-import {
-  findKeybindingConflictsForDefinitions,
-  KEYBINDING_DEFINITIONS
-} from '../../../../shared/keybindings'
 import {
   findPluginCommandForKeybinding,
   pluginCommandKeybindingDefinition

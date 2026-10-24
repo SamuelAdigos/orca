@@ -11,7 +11,7 @@ import {
   getKeybindingPlatform,
   isDigitIndexActionId
 } from './definitions'
-import { keybindingConflictIdentities } from './matching'
+import { keybindingConflictIdentities } from './matching-key'
 import {
   normalizeKeybindingWithOptions,
   normalizeOptionsForAction,

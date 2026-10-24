@@ -2,13 +2,11 @@ import type {
   KeybindingActionId,
   KeybindingInput,
   KeybindingOverrides,
-  KeybindingMatchOptions,
-  ParsedKeybinding
+  KeybindingMatchOptions
 } from './types'
-import { DEFINITIONS_BY_ID, DIGIT_INDEX_KEY_PATTERN, isDigitIndexActionId } from './definitions'
+import { DEFINITIONS_BY_ID, DIGIT_INDEX_KEY_PATTERN } from './definitions'
 import { canonicalizeParsedKeybinding, parseKeybinding } from './parser'
 import {
-  platformModifiers,
   modifierStateMatches,
   keyMatches,
   digitKeyMatches,
@@ -42,46 +40,6 @@ export function keybindingMatchesInput(
   }
   return (
     modifierStateMatches(parsed, input, platform) && keyMatches(parsed.key, input, parsed, platform)
-  )
-}
-
-export function keybindingConflictIdentityForParsed(
-  parsed: ParsedKeybinding,
-  platform: NodeJS.Platform
-): string {
-  if (parsed.doubleTapModifier) {
-    return `DoubleTap:${resolveModifierToken(parsed.doubleTapModifier, platform)}`
-  }
-  const modifiers = platformModifiers(parsed, platform)
-  return [
-    modifiers.meta ? 'Meta' : '',
-    modifiers.control ? 'Control' : '',
-    modifiers.alt ? 'Alt' : '',
-    modifiers.shift ? 'Shift' : '',
-    parsed.key
-  ].join('+')
-}
-
-export function getKeybindingConflictIdentity(binding: string, platform: NodeJS.Platform): string {
-  const parsed = parseKeybinding(binding)
-  return parsed ? keybindingConflictIdentityForParsed(parsed, platform) : binding
-}
-
-export function keybindingConflictIdentities(
-  actionId: KeybindingActionId,
-  binding: string,
-  platform: NodeJS.Platform
-): readonly string[] {
-  const exact = getKeybindingConflictIdentity(binding, platform)
-  if (!isDigitIndexActionId(actionId)) {
-    return [exact]
-  }
-  const parsed = parseKeybinding(binding)
-  if (!parsed || parsed.doubleTapModifier || !DIGIT_INDEX_KEY_PATTERN.test(parsed.key)) {
-    return [exact]
-  }
-  return Array.from({ length: 9 }, (_, index) =>
-    keybindingConflictIdentityForParsed({ ...parsed, key: String(index + 1) }, platform)
   )
 }
 
@@ -156,4 +114,38 @@ export function matchKeybindingDigitIndex(
     }
   }
   return null
+}
+
+export function matchesRecentTabSwitcherChord(
+  input: KeybindingInput,
+  platform: NodeJS.Platform,
+  keybindings?: KeybindingOverrides,
+  options: KeybindingMatchOptions = {}
+): boolean {
+  const control = Boolean(input.control ?? input.ctrlKey)
+  const meta = Boolean(input.meta ?? input.metaKey)
+  const alt = Boolean(input.alt ?? input.altKey)
+  if (input.code !== 'Tab' || !control || meta || alt) {
+    return false
+  }
+  // Why: the Ctrl+Tab switcher is a held-key interaction where Shift reverses
+  // direction. Gate the whole family on the configurable unshifted binding.
+  return keybindingMatchesAction(
+    'tab.previousRecent',
+    {
+      key: input.key,
+      code: input.code,
+      alt,
+      meta,
+      control,
+      shift: false,
+      altKey: alt,
+      metaKey: meta,
+      ctrlKey: control,
+      shiftKey: false
+    },
+    platform,
+    keybindings,
+    options
+  )
 }

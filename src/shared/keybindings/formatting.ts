@@ -10,8 +10,13 @@ import type {
 } from './types'
 import { KEYBINDING_DEFINITIONS, isDigitIndexActionId, isKeybindingActionId } from './definitions'
 import { parseKeybinding } from './parser'
-import { matchesRecentTabSwitcherChord } from '../window-shortcut-policy'
-import { keybindingInputForBinding, isNativeMacPasteInput } from './matching-key'
+import { matchesRecentTabSwitcherChord } from './matching'
+import {
+  keybindingInputForBinding,
+  isNativeMacPasteInput,
+  getKeybindingConflictIdentity,
+  keybindingConflictIdentities
+} from './matching-key'
 import {
   getEffectiveKeybindingsForAction,
   getEffectiveKeybindingsForDefinition,
@@ -20,7 +25,6 @@ import {
   bindingsOverlap
 } from './effective'
 import { isDoubleTapBinding } from './normalization'
-import { getKeybindingConflictIdentity, keybindingConflictIdentities } from './matching'
 
 function formatModifierGlyph(modifier: ModifierToken, isMac: boolean): string {
   switch (modifier) {
