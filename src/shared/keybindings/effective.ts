@@ -102,14 +102,15 @@ export function getEffectiveKeybindingsForDefinition(
   definition: KeybindingDefinition,
   platform: NodeJS.Platform,
   overrides: KeybindingOverrides = emptyOverrides,
-  savedOverrides: KeybindingOverrides = overrides,
   definitions: readonly KeybindingDefinition[] = KEYBINDING_DEFINITIONS
 ): string[] {
   const configured = getConfiguredBindings(definition.id, platform, overrides, definition)
   if (!definition.implicitDefaultYields || Object.hasOwn(overrides, definition.id)) {
     return configured
   }
-  const cacheable = savedOverrides === overrides && definitions === KEYBINDING_DEFINITIONS
+  const cacheable =
+    definition === DEFINITIONS_BY_ID.get('terminal.toggleNativeChat') &&
+    definitions === KEYBINDING_DEFINITIONS
   const cached = cacheable ? implicitBindings.get(overrides)?.get(platform) : undefined
   if (cached) {
     return cached
@@ -119,13 +120,10 @@ export function getEffectiveKeybindingsForDefinition(
       !definitions.some(
         (other) =>
           other.id !== definition.id &&
-          Object.hasOwn(savedOverrides, other.id) &&
+          Object.hasOwn(overrides, other.id) &&
           getConfiguredBindings(other.id, platform, overrides, other).some(
             (claim) =>
               bindingsOverlap(definition, binding, other, claim, platform) &&
-              getConfiguredBindings(other.id, platform, savedOverrides, other).some((saved) =>
-                bindingsOverlap(other, claim, other, saved, platform)
-              ) &&
               !getDefaultBindings(other, platform).some((ownDefault) =>
                 bindingsOverlap(other, claim, other, ownDefault, platform)
               )

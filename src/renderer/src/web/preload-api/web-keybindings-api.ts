@@ -111,12 +111,9 @@ export function writeWebKeybindingAction(
   } else {
     candidateOverrides[actionId] = normalizedBindings
   }
-  const blockingConflict = findKeybindingConflicts(platform, candidateOverrides, {
-    savedOverrides:
-      normalizedBindings === null
-        ? { ...currentSnapshot.overrides, [actionId]: currentSnapshot.commonOverrides[actionId] }
-        : currentSnapshot.overrides
-  }).find((conflict) => conflict.actionIds.includes(actionId))
+  const blockingConflict = findKeybindingConflicts(platform, candidateOverrides).find((conflict) =>
+    conflict.actionIds.includes(actionId)
+  )
   if (blockingConflict) {
     throw new Error(
       `${formatKeybindingList([blockingConflict.binding], platform)} conflicts with another shortcut.`

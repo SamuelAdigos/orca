@@ -205,7 +205,6 @@ export type KeybindingConflict = {
 }
 
 export type FindKeybindingConflictOptions = {
-  savedOverrides?: KeybindingOverrides
   ignoredActionIds?: Iterable<KeybindingActionId>
   relevantActionIds?: Iterable<KeybindingActionId>
 }

@@ -115,37 +115,3 @@ export function matchKeybindingDigitIndex(
   }
   return null
 }
-
-export function matchesRecentTabSwitcherChord(
-  input: KeybindingInput,
-  platform: NodeJS.Platform,
-  keybindings?: KeybindingOverrides,
-  options: KeybindingMatchOptions = {}
-): boolean {
-  const control = Boolean(input.control ?? input.ctrlKey)
-  const meta = Boolean(input.meta ?? input.metaKey)
-  const alt = Boolean(input.alt ?? input.altKey)
-  if (input.code !== 'Tab' || !control || meta || alt) {
-    return false
-  }
-  // Why: the Ctrl+Tab switcher is a held-key interaction where Shift reverses
-  // direction. Gate the whole family on the configurable unshifted binding.
-  return keybindingMatchesAction(
-    'tab.previousRecent',
-    {
-      key: input.key,
-      code: input.code,
-      alt,
-      meta,
-      control,
-      shift: false,
-      altKey: alt,
-      metaKey: meta,
-      ctrlKey: control,
-      shiftKey: false
-    },
-    platform,
-    keybindings,
-    options
-  )
-}

@@ -6,7 +6,6 @@ import {
   formatKeybindingList,
   isDoubleTapBinding,
   keybindingFromInput,
-  keybindingInputForBinding,
   keybindingMatchesAction,
   keybindingMatchesInput,
   normalizeKeybinding
@@ -42,15 +41,6 @@ describe('keybindings', () => {
   })
 
   it('matches double-tap bindings only against synthetic double-tap input', () => {
-    expect(keybindingInputForBinding('DoubleTap+Shift', 'darwin')).toEqual({
-      doubleTapModifier: 'Shift'
-    })
-    expect(keybindingInputForBinding('DoubleTap+Mod', 'darwin')).toEqual({
-      doubleTapModifier: 'Cmd'
-    })
-    expect(keybindingInputForBinding('DoubleTap+Mod', 'win32')).toEqual({
-      doubleTapModifier: 'Ctrl'
-    })
     expect(
       keybindingMatchesInput('DoubleTap+Shift', { doubleTapModifier: 'Shift' }, 'darwin')
     ).toBe(true)

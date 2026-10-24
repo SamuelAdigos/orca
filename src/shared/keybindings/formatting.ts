@@ -3,20 +3,13 @@ import type {
   KeybindingActionId,
   KeybindingConflict,
   KeybindingDefinition,
-  KeybindingInput,
   KeybindingOverrides,
   ModifierToken,
   KeybindingScope
 } from './types'
 import { KEYBINDING_DEFINITIONS, isDigitIndexActionId, isKeybindingActionId } from './definitions'
 import { parseKeybinding } from './parser'
-import { matchesRecentTabSwitcherChord } from './matching'
-import {
-  keybindingInputForBinding,
-  isNativeMacPasteInput,
-  getKeybindingConflictIdentity,
-  keybindingConflictIdentities
-} from './matching-key'
+import { getKeybindingConflictIdentity, keybindingConflictIdentities } from './matching-key'
 import {
   getEffectiveKeybindingsForAction,
   getEffectiveKeybindingsForDefinition,
@@ -176,7 +169,6 @@ export function findKeybindingConflictsForDefinitions(
       definition,
       platform,
       overrides,
-      options.savedOverrides,
       definitions
     )) {
       const groups = new Set(keybindingConflictGroups(definition))
@@ -198,7 +190,7 @@ export function findKeybindingConflictsForDefinitions(
   }
 
   const seenConflictKeys = new Set<string>()
-  const conflicts = Array.from(owners.values())
+  return Array.from(owners.values())
     .filter(({ actionIds }) => actionIds.size > 1 && setIntersects(actionIds, customizedActions))
     .map(({ binding, actionIds }) => ({
       binding,
@@ -231,18 +223,6 @@ export function findKeybindingConflictsForDefinitions(
       seenConflictKeys.add(key)
       return true
     })
-  for (const binding of overrides?.['terminal.toggleNativeChat'] ?? []) {
-    if (
-      isNativeChatToggleInputReserved(
-        keybindingInputForBinding(binding, platform),
-        platform,
-        overrides
-      )
-    ) {
-      conflicts.push({ binding, actionIds: ['terminal.toggleNativeChat'] })
-    }
-  }
-  return conflicts
 }
 
 function setIntersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
@@ -252,15 +232,4 @@ function setIntersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean 
     }
   }
   return false
-}
-
-export function isNativeChatToggleInputReserved(
-  input: KeybindingInput,
-  platform: NodeJS.Platform,
-  overrides?: KeybindingOverrides
-): boolean {
-  return (
-    isNativeMacPasteInput(input, platform) ||
-    matchesRecentTabSwitcherChord(input, platform, overrides)
-  )
 }

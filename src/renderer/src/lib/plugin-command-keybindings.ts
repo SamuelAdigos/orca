@@ -62,41 +62,11 @@ export function getEffectivePluginCommandKeybindings(
 
 export function findPluginCommandForKeybinding(
   commands: readonly ActivePluginCommand[],
-  input: KeybindingInput & Partial<Parameters<typeof fileSearchClaimsTextKey>[0]>,
+  input: KeybindingInput,
   platform: NodeJS.Platform,
   overrides: KeybindingOverrides | undefined,
-  hasActiveWorktree: boolean,
-  context?: KeybindingMatchOptions & { target: EventTarget | null }
+  hasActiveWorktree: boolean
 ): ActivePluginCommand | null {
-  if (context) {
-    const contextInput = {
-      target: context.target,
-      key: input.key,
-      code: input.code,
-      metaKey: input.meta ?? input.metaKey,
-      ctrlKey: input.control ?? input.ctrlKey,
-      altKey: input.alt ?? input.altKey,
-      shiftKey: input.shift ?? input.shiftKey,
-      isComposing: input.isComposing,
-      altGraph: input.altGraph || input.getModifierState?.('AltGraph'),
-      doubleTapModifier: input.doubleTapModifier
-    }
-    if (
-      context.context !== 'app' ||
-      fileSearchClaimsTextKey(contextInput) ||
-      isFloatingWorkspaceTerminalInputTarget(context.target) ||
-      (isFloatingWorkspacePanelFocused() &&
-        matchFloatingWorkspacePanelChord(
-          { ...contextInput, target: input.target ?? null },
-          platform,
-          null,
-          overrides,
-          context
-        ) !== null)
-    ) {
-      return null
-    }
-  }
   for (const command of commands) {
     if (command.context === 'worktree' && !hasActiveWorktree) {
       continue
@@ -109,4 +79,18 @@ export function findPluginCommandForKeybinding(
     }
   }
   return null
+}
+
+export function globalShortcutTargetYields(
+  input: KeybindingInput & Parameters<typeof fileSearchClaimsTextKey>[0],
+  platform: NodeJS.Platform,
+  overrides: KeybindingOverrides | undefined,
+  options: KeybindingMatchOptions
+): boolean {
+  return (
+    fileSearchClaimsTextKey(input) ||
+    isFloatingWorkspaceTerminalInputTarget(input.target) ||
+    (isFloatingWorkspacePanelFocused() &&
+      matchFloatingWorkspacePanelChord(input, platform, null, overrides, options) !== null)
+  )
 }

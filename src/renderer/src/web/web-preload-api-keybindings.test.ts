@@ -12,93 +12,53 @@ describe('web keybindings preload API', () => {
     vi.doUnmock('./web-runtime-client')
   })
 
-  it('preserves old navigation aliases and restores the implicit toggle when freed', async () => {
+  it('roundtrips old arrays, new claims, explicit conflicts, masks/reset and pruning', async () => {
     const { api, storage } = await installApi('MacIntel')
-    storage.setItem(
-      'orca.web.keybindings.v1',
-      JSON.stringify({
-        keybindings: { 'worktree.navigateDown': ['Mod+Shift+J', 'Mod+Alt+Y'] }
-      })
-    )
-    const loaded = await api.keybindings.get()
-    expect(loaded.overrides['worktree.navigateDown']).toEqual(['Mod+Shift+J', 'Mod+Alt+Y'])
-    expect(loaded.overrides).not.toHaveProperty('terminal.toggleNativeChat')
-    expect(
-      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', loaded.overrides)
-    ).toEqual([])
-    const freed = await api.keybindings.setAction({
-      actionId: 'worktree.navigateDown',
-      bindings: []
-    })
-    expect(
-      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', freed.overrides)
-    ).toEqual(['Mod+Shift+J'])
-  })
-
-  it('validates fresh writes and reset/common provenance through browser consumers', async () => {
-    const { api, storage } = await installApi('MacIntel')
+    const toggle = 'terminal.toggleNativeChat'
+    const navigation = 'worktree.navigateDown'
+    const aliases = ['Mod+Shift+J', 'Mod+Alt+Y']
+    const seed = (value: unknown) =>
+      storage.setItem('orca.web.keybindings.v1', JSON.stringify(value))
+    const effective = async () =>
+      getEffectiveKeybindingsForAction(toggle, 'darwin', (await api.keybindings.reload()).overrides)
+    await api.keybindings.setAction({ actionId: navigation, bindings: aliases })
+    expect(await effective()).toEqual([])
+    seed({ keybindings: { [navigation]: aliases } })
+    expect((await api.keybindings.get()).overrides).toEqual({ [navigation]: aliases })
+    await api.keybindings.setAction({ actionId: navigation, bindings: [] })
+    expect(await effective()).toEqual(['Mod+Shift+J'])
+    await api.keybindings.setAction({ actionId: toggle, bindings: [] })
+    expect(await effective()).toEqual([])
+    await api.keybindings.setAction({ actionId: toggle, bindings: null })
+    expect(await effective()).toEqual(['Mod+Shift+J'])
+    await api.keybindings.setAction({ actionId: navigation, bindings: null })
+    expect(await effective()).toEqual([])
     await expect(
-      api.keybindings.setAction({ actionId: 'worktree.navigateDown', bindings: ['Mod+Shift+J'] })
+      api.keybindings.setAction({ actionId: toggle, bindings: aliases })
     ).rejects.toThrow('conflicts')
-    storage.setItem(
-      'orca.web.keybindings.v1',
-      JSON.stringify({ keybindings: { 'worktree.navigateDown': ['Mod+Shift+J', 'Mod+Alt+Y'] } })
-    )
-    await api.keybindings.setAction({ actionId: 'worktree.navigateDown', bindings: [] })
-    const reset = await api.keybindings.setAction({
-      actionId: 'worktree.navigateDown',
-      bindings: null
+    seed({
+      version: 1,
+      keybindings: { [navigation]: ['Mod+Alt+Y'], [toggle]: ['Mod+Alt+Y'] },
+      platforms: { darwin: { [navigation]: [] } }
     })
-    expect(reset.overrides['worktree.navigateDown']).toEqual(['Mod+Shift+J', 'Mod+Alt+Y'])
-    expect(
-      getEffectiveKeybindingsForAction('terminal.toggleNativeChat', 'darwin', reset.overrides)
-    ).toEqual([])
-    await api.keybindings.setAction({
-      actionId: 'terminal.toggleNativeChat',
-      bindings: ['Mod+Alt+K']
-    })
+    const unchanged = storage.getItem('orca.web.keybindings.v1')
     await expect(
-      api.keybindings.setAction({
-        actionId: 'terminal.toggleNativeChat',
-        bindings: ['Mod+Shift+J']
-      })
+      api.keybindings.setAction({ actionId: navigation, bindings: null })
     ).rejects.toThrow('conflicts')
-    const implicit = await api.keybindings.setAction({
-      actionId: 'terminal.toggleNativeChat',
-      bindings: null
+    expect(storage.getItem('orca.web.keybindings.v1')).toBe(unchanged)
+    seed({ keybindings: { [navigation]: ['Mod+Shift+J', 'Mod+P'] } })
+    expect((await api.keybindings.reload()).overrides).toEqual({})
+    expect(await effective()).toEqual(['Mod+Shift+J'])
+    const win = await installApi('Windows NT 10.0')
+    const saved = await win.api.keybindings.setAction({
+      actionId: 'worktree.palette',
+      bindings: aliases
     })
-    expect(implicit.overrides).not.toHaveProperty('terminal.toggleNativeChat')
-    storage.setItem(
-      'orca.web.keybindings.v1',
-      JSON.stringify({
-        keybindings: { 'terminal.paste': [], 'terminal.toggleNativeChat': ['Mod+V'] }
-      })
-    )
-    expect((await api.keybindings.get()).overrides).toEqual({ 'terminal.paste': [] })
+    expect(saved.overrides['worktree.palette']).toEqual(aliases)
+    expect(getEffectiveKeybindingsForAction(toggle, saved.platform, saved.overrides)).toEqual([
+      'Mod+Shift+J'
+    ])
   })
-
-  it.each(['Windows NT 10.0', 'Linux'])(
-    'preserves %s palette aliases through write and reload',
-    async (platform) => {
-      const { api, storage } = await installApi(platform)
-      const aliases = ['Mod+Shift+J', 'Mod+Alt+Y']
-      storage.setItem(
-        'orca.web.keybindings.v1',
-        JSON.stringify({ keybindings: { 'worktree.palette': aliases } })
-      )
-      expect((await api.keybindings.get()).overrides['worktree.palette']).toEqual(aliases)
-      await api.keybindings.setAction({ actionId: 'worktree.palette', bindings: aliases })
-      const loaded = await api.keybindings.reload()
-      expect(loaded.overrides['worktree.palette']).toEqual(aliases)
-      expect(
-        getEffectiveKeybindingsForAction(
-          'terminal.toggleNativeChat',
-          loaded.platform,
-          loaded.overrides
-        )
-      ).toEqual(['Mod+Shift+J'])
-    }
-  )
 
   it('returns snapshots and persists customized bindings in browser storage', async () => {
     const { api, storage } = await installApi('Linux')

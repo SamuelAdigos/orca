@@ -3,23 +3,19 @@ import React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import type * as ShortcutFilterRailModule from './ShortcutFilterRail'
 import type { ShortcutRowsList } from './ShortcutRowsList'
 import { ShortcutsPane } from './ShortcutsPane'
 
-const fixtures = vi.hoisted(() => {
-  Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Macintosh' })
-  return { empty: [] }
-})
+vi.hoisted(() => vi.stubGlobal('navigator', { userAgent: 'Macintosh' }))
+const fixtures = vi.hoisted(() => ({
+  empty: [],
+  chord: { key: 'j', code: 'KeyJ', metaKey: true, shiftKey: true }
+}))
 vi.mock('@/store/plugin-panels', () => ({ useEditablePluginCommands: () => fixtures.empty }))
 vi.mock('./use-mac-captured-digit-chords', () => ({
   useMacCapturedDigitChords: () => fixtures.empty
 }))
 vi.mock('./KeybindingsFileActions', () => ({ KeybindingsFileActions: () => null }))
-vi.mock('./ShortcutFilterRail', async (importOriginal) => ({
-  ...(await importOriginal<typeof ShortcutFilterRailModule>()),
-  ShortcutFilterRail: () => null
-}))
 vi.mock('./ShortcutTerminalPolicyControl', () => ({ ShortcutTerminalPolicyControl: () => null }))
 vi.mock('./ShortcutRowsList', () => ({
   ShortcutRowsList: (props: React.ComponentProps<typeof ShortcutRowsList>) => (
@@ -27,16 +23,7 @@ vi.mock('./ShortcutRowsList', () => ({
       <button onClick={() => props.onStartRecordingAt('terminal.toggleNativeChat', 0)}>
         Record
       </button>
-      <button
-        onClick={() =>
-          props.onCapture('terminal.toggleNativeChat', {
-            key: 'j',
-            code: 'KeyJ',
-            metaKey: true,
-            shiftKey: true
-          })
-        }
-      >
+      <button onClick={() => props.onCapture('terminal.toggleNativeChat', fixtures.chord)}>
         Capture
       </button>
       <span>{props.errors['terminal.toggleNativeChat']}</span>
@@ -57,14 +44,11 @@ it('retyping a nominal default resets unless a common override requires an expli
   const keybindings = { ...common, 'worktree.navigateDown': ['Mod+Shift+J'] }
   useAppStore.setState({
     keybindings,
-    settings: null,
-    settingsSearchQuery: '',
-    activeWorktreeId: null,
     keybindingSnapshot: null,
     resetKeybindingOverride: reset,
     setKeybindingOverride: set
   })
-  const view = render(<ShortcutsPane />)
+  render(<ShortcutsPane />)
   fireEvent.click(screen.getByText('Record'))
   await act(async () => fireEvent.click(screen.getByText('Capture')))
   expect(reset).toHaveBeenCalledWith('terminal.toggleNativeChat')
@@ -87,5 +71,4 @@ it('retyping a nominal default resets unless a common override requires an expli
   expect(screen.getByText(/conflicts with/)).toBeTruthy()
   expect(reset).not.toHaveBeenCalled()
   expect(set).not.toHaveBeenCalled()
-  view.unmount()
 })

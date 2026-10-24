@@ -191,40 +191,6 @@ export function resolveModifierToken(
   }
 }
 
-export function keybindingInputForBinding(
-  binding: string,
-  platform: NodeJS.Platform
-): KeybindingInput {
-  const parsed = parseKeybinding(binding)
-  if (!parsed) {
-    return {}
-  }
-  if (parsed.doubleTapModifier) {
-    const modifier = parsed.doubleTapModifier
-    return {
-      doubleTapModifier: modifier === 'Mod' ? (platform === 'darwin' ? 'Cmd' : 'Ctrl') : modifier
-    }
-  }
-  return {
-    key: parsed.key,
-    code: parsed.key === 'Tab' ? 'Tab' : undefined,
-    ...platformModifiers(parsed, platform)
-  }
-}
-
-export function isNativeMacPasteInput(input: KeybindingInput, platform: NodeJS.Platform): boolean {
-  return (
-    platform === 'darwin' &&
-    !input.doubleTapModifier &&
-    hasModifier(input, 'meta') &&
-    !hasModifier(input, 'control') &&
-    !hasModifier(input, 'alt') &&
-    !hasModifier(input, 'shift') &&
-    // Why: produced keys win over physical codes on remapped layouts, with physical fallback for IME/non-Latin keys.
-    (logicalKeyTokenFromInput(input) ?? physicalCodeKeyTokenFromInput(input)) === 'V'
-  )
-}
-
 export function keybindingConflictIdentityForParsed(
   parsed: ParsedKeybinding,
   platform: NodeJS.Platform

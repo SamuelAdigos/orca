@@ -1,6 +1,11 @@
 import { usePluginCommands } from '@/store/plugin-panels'
-import { useEffect } from 'react'
-import type { KeybindingInput } from '../../../../shared/keybindings'
+import { useEffect, useLayoutEffect, useRef } from 'react'
+import { matchesRecentTabSwitcherChord } from '../../../../shared/window-shortcut-policy'
+import {
+  globalShortcutTargetYields,
+  findPluginCommandForKeybinding
+} from '@/lib/plugin-command-keybindings'
+import { getKeybindingContext } from '../terminal-workspace-model'
 import {
   ModifierDoubleTapDetector,
   toModifierDoubleTapEvent
@@ -50,21 +55,39 @@ export function resolveNativeChatToggleShortcutDetectedAgent({
  *  the chord is inert on plain shells / non-terminal surfaces. */
 export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive: boolean): void {
   const pluginCommands = usePluginCommands()
+  const pluginCommandsRef = useRef(pluginCommands)
+  useLayoutEffect(() => {
+    pluginCommandsRef.current = pluginCommands
+  }, [pluginCommands])
   useEffect(() => {
     if (!isWorktreeActive) {
       return
     }
     const platform = getShortcutPlatform()
     const detector = new ModifierDoubleTapDetector()
-    const attemptToggle = (e: KeyboardEvent, input: KeybindingInput): void => {
+    const attemptToggle = (
+      e: KeyboardEvent,
+      input: Parameters<typeof globalShortcutTargetYields>[0]
+    ): void => {
       const state = useAppStore.getState()
+      if (!matchesNativeChatToggleShortcut(input, platform, state.keybindings)) {
+        return
+      }
+      const context = getKeybindingContext(e.target)
+      const options = { context, terminalShortcutPolicy: state.settings?.terminalShortcutPolicy }
       if (
-        !matchesNativeChatToggleShortcut(input, platform, state.keybindings, {
-          target: e.target,
-          terminalShortcutPolicy: state.settings?.terminalShortcutPolicy,
-          pluginCommands,
-          hasActiveWorktree: Boolean(state.activeWorktreeId)
-        })
+        matchesRecentTabSwitcherChord(input, platform, state.keybindings, options) ||
+        (context === 'app' &&
+          !input.isComposing &&
+          input.key !== 'Process' &&
+          !globalShortcutTargetYields(input, platform, state.keybindings, options) &&
+          findPluginCommandForKeybinding(
+            pluginCommandsRef.current,
+            input,
+            platform,
+            state.keybindings,
+            Boolean(state.activeWorktreeId)
+          ))
       ) {
         return
       }
@@ -144,7 +167,17 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
         Date.now()
       )
       if (e.type === 'keydown') {
-        attemptToggle(e, detected ? { doubleTapModifier: detected.modifier } : e)
+        attemptToggle(
+          e,
+          detected
+            ? {
+                doubleTapModifier: detected.modifier,
+                target: e.target,
+                isComposing: e.isComposing,
+                altGraph: e.getModifierState('AltGraph')
+              }
+            : e
+        )
       }
     }
     const reset = (): void => detector.reset()
@@ -158,5 +191,5 @@ export function useNativeChatToggleShortcut(worktreeId: string, isWorktreeActive
       window.removeEventListener('blur', reset)
       window.removeEventListener('focusin', reset)
     }
-  }, [worktreeId, isWorktreeActive, pluginCommands])
+  }, [worktreeId, isWorktreeActive])
 }
